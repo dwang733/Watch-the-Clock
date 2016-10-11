@@ -4,9 +4,15 @@
 chrome.webNavigation.onCompleted.addListener(function(details) {
 	if (details.frameId === 0) {
 		var tld = getTLD(details.url);
-		console.log(tld);
 		saveTime(tld);
 	}
+});
+
+chrome.tabs.onActivated.addListener(function(activeInfo) {
+	chrome.tabs.get(activeInfo.tabId, function(tab) {
+		var tld = getTLD(tab.url);
+		saveTime(tld);
+	});
 });
 
 // Get top level domain name
@@ -16,16 +22,37 @@ function getTLD(thisURL) {
 	return thisURL.match(regex)[1];
 }
 
+// Find previous URL visited and add time spent
 function saveTime(thisURL) {
-	chrome.storage.sync.get(["prevStart", thisURL], function(getItems) {
-		console.log(getItems["prevStart"] + " " + getItems[thisURL]);
+	chrome.storage.sync.get(["prevStart", "prevURL"], function(getItems) {
+		console.log("New URL: " + thisURL);
+		console.log("Previous URL: " + getItems["prevURL"]);
 		var setObj = {};
 		var currTime = new Date().getTime();
-		if (getItems["prevStart"] !== undefined) {
-			var thisURLTime = getItems[thisURL] === undefined ? 0 : getItems[thisURL];
-			setObj[thisURL] = thisURLTime + (currTime - getItems["prevStart"]) / 1000;
+		var prevURL = getItems["prevURL"];
+		var prevStart = getItems["prevStart"];
+
+		chrome.storage.sync.get(prevURL, function(item) {
+			if (prevURL !== undefined && prevStart !== undefined) {
+				var prevURLTime = item[prevURL] === undefined ? 0 : item[prevURL];
+				console.log("Total time spent on prev URL before: " + prevURLTime);
+				setObj[prevURL] = prevURLTime + (currTime - prevStart) / 1000;
+				console.log("Time just spent on prev URL: " + ((currTime - prevStart) / 1000));
+			}
+			setObj["prevStart"] = currTime;
+			setObj["prevURL"] = thisURL;
+			chrome.storage.sync.set(setObj, function() {
+				printStorage();
+			})
+		});
+	});
+}
+
+function printStorage() {
+	chrome.storage.sync.get(null, function(items) {
+		for (i in items) {
+			console.log("Key: " + i + "		Value: " + items[i]);
 		}
-		setObj["prevStart"] = currTime;
-		chrome.storage.sync.set(setObj);
+		console.log("---------------------------------");
 	});
 }
