@@ -8,11 +8,28 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 	}
 });
 
+// Fires when user switches tab
 chrome.tabs.onActivated.addListener(function(activeInfo) {
 	chrome.tabs.get(activeInfo.tabId, function(tab) {
 		var tld = getTLD(tab.url);
 		saveTime(tld);
 	});
+});
+
+// Fires when window changes focus (or no window is in focus)
+chrome.windows.onFocusChanged.addListener(function(windowId) {
+	// No windows are in focus
+	if (windowId == chrome.windows.WINDOW_ID_NONE) {
+		console.log("Not focused");
+		saveTime(undefined);
+	}
+	// Get active tab in newly focused window
+	else {
+		chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
+			tld = getTLD(tab[0].url);
+			saveTime(tld);
+		});
+	}
 });
 
 // Get top level domain name
@@ -23,6 +40,7 @@ function getTLD(thisURL) {
 }
 
 // Find previous URL visited and add time spent
+// Also set previous URL and time to current URL and time
 function saveTime(thisURL) {
 	chrome.storage.sync.get(["prevStart", "prevURL"], function(getItems) {
 		console.log("New URL: " + thisURL);
@@ -42,11 +60,21 @@ function saveTime(thisURL) {
 			setObj["prevStart"] = currTime;
 			setObj["prevURL"] = thisURL;
 			chrome.storage.sync.set(setObj, function() {
-				printStorage();
+				// If thisURL is undefined (b/c no focus), manually remove "prevURL"
+				if (thisURL === undefined) {
+					chrome.storage.sync.remove("prevURL", function() {
+						printStorage();
+					});
+				}
+				else {
+					printStorage();
+				}
 			})
 		});
 	});
 }
+
+// **************** DEBUGGING *********************
 
 function printStorage() {
 	chrome.storage.sync.get(null, function(items) {
