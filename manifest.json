@@ -1,7 +1,7 @@
 {
 	"manifest_version": 2,
 	"name": "Watch the Clock",
-	"version": "0.3.1",
+	"version": "0.3.2",
 	"description": "Track time on websites and categorize how you're spending your time",
 	"browser_action": {
 		"default_icon": "icon.png",
@@ -11,7 +11,8 @@
 	"permissions": [
 		"tabs",
 		"webNavigation",
-		"storage"
+		"storage",
+		"alarms"
 	],
 	"background": {
 		"scripts": ["jquery-3.1.1.min.js", "background.js", "popup.js"],

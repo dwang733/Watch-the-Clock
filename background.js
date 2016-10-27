@@ -1,3 +1,14 @@
+/* TODO:
+√ Make sure chrome.alarms works
+- Add chrome.idle
+- Display time data in popup. Figure out how to do this.
+
+- Change alarm time to >1 min
+*/
+
+
+/****************** WEBSITE/FOCUS TRACKING *********************/
+
 // Fires when new page is loaded
 // Use webNavigation.onCompleted instead of tabs.onUpdated
 // webNavigation needed for event page b/c event filters
@@ -32,12 +43,7 @@ chrome.windows.onFocusChanged.addListener(function(windowId) {
 	}
 });
 
-// Get top level domain name
-// E.g. https://developer.chrome.com/extensions/storage -> https://developer.chrome.com
-function getTLD(thisURL) {
-	regex = /^(\w+:\/\/[^\/]+).*$/;
-	return thisURL.match(regex)[1];
-}
+/****************** TIME TRACKING ******************/
 
 // Find previous URL visited and add time spent
 // Also set previous URL and time to current URL and time
@@ -60,21 +66,42 @@ function saveTime(thisURL) {
 			setObj["prevStart"] = currTime;
 			setObj["prevURL"] = thisURL;
 			chrome.storage.sync.set(setObj, function() {
-				// If thisURL is undefined (b/c no focus), manually remove "prevURL"
+				// If thisURL is undefined (b/c no focus), manually remove "prevURL" and alarm
 				if (thisURL === undefined) {
 					chrome.storage.sync.remove("prevURL", function() {
 						printStorage();
+						console.log("Cleared alarm.");
+						chrome.alarms.clear("Update Time");
 					});
 				}
+				// Update time after certain interval
 				else {
 					printStorage();
+					chrome.alarms.create("Update Time", {"delayInMinutes": 1/4});
 				}
-			})
+			});
 		});
 	});
 }
 
-// **************** DEBUGGING *********************
+// Update time when alarm called
+chrome.alarms.onAlarm.addListener(function(alarm) {
+	chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
+		tld = getTLD(tab[0].url);
+		console.log("Update from alarm.");
+		saveTime(tld);
+	});
+});
+
+/**************** HELPER FUNCTIONS ******************/
+// Get top level domain name
+// E.g. https://developer.chrome.com/extensions/storage -> https://developer.chrome.com
+function getTLD(thisURL) {
+	regex = /^(\w+:\/\/[^\/]+).*$/;
+	return thisURL.match(regex)[1];
+}
+
+/******************** DEBUGGING ********************/
 
 function printStorage() {
 	chrome.storage.sync.get(null, function(items) {
