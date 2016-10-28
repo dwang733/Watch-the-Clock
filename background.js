@@ -1,26 +1,34 @@
-/* TODO:
-√ Make sure chrome.alarms works
-- Add chrome.idle
-- Display time data in popup. Figure out how to do this.
-
-- Change alarm time to >1 min
-*/
-
-
 /****************** WEBSITE/FOCUS TRACKING *********************/
 
 // Fires when new page is loaded
 // Use webNavigation.onCompleted instead of tabs.onUpdated
-// webNavigation needed for event page b/c event filters
+// tabs.onUpdated fires multiple times when page is loaded (for some reason)
 chrome.webNavigation.onCompleted.addListener(function(details) {
+	// Only occurs if page is fully loaded
 	if (details.frameId === 0) {
-		var tld = getTLD(details.url);
-		saveTime(tld);
+		console.log("Loading new page!");
+		// Make sure we are actually seeing the new page 
+		// E.g. Open link in new tab will not trigger saveTime()
+		chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
+			console.log("Current tab: " + tab[0].url);
+			console.log("New page: " + details.url);
+			// Check if newly loaded page is actually on this tab
+			if (tab[0].url === details.url) {
+				console.log("Loaded on current tab!");
+				var tld = getTLD(details.url);
+				saveTime(tld);
+			}
+			else {
+				console.log("Loaded elsewhere (new tab, etc.)!");
+				console.log("---------------------------------");
+			}
+		});
 	}
 });
 
 // Fires when user switches tab
 chrome.tabs.onActivated.addListener(function(activeInfo) {
+	console.log("Switched tabs!");
 	chrome.tabs.get(activeInfo.tabId, function(tab) {
 		var tld = getTLD(tab.url);
 		saveTime(tld);
@@ -31,11 +39,12 @@ chrome.tabs.onActivated.addListener(function(activeInfo) {
 chrome.windows.onFocusChanged.addListener(function(windowId) {
 	// No windows are in focus
 	if (windowId == chrome.windows.WINDOW_ID_NONE) {
-		console.log("Not focused");
+		console.log("Chrome unfocused!");
 		saveTime(undefined);
 	}
 	// Get active tab in newly focused window
 	else {
+		console.log("Chrome refocused!");
 		chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
 			tld = getTLD(tab[0].url);
 			saveTime(tld);
@@ -69,6 +78,7 @@ function saveTime(thisURL) {
 				// If thisURL is undefined (b/c no focus), manually remove "prevURL" and alarm
 				if (thisURL === undefined) {
 					chrome.storage.sync.remove("prevURL", function() {
+						console.log("Dumping storage from no focus!");
 						printStorage();
 						console.log("Cleared alarm.");
 						chrome.alarms.clear("Update Time");
@@ -76,8 +86,9 @@ function saveTime(thisURL) {
 				}
 				// Update time after certain interval
 				else {
+					console.log("Dumping storage from focus!");
 					printStorage();
-					chrome.alarms.create("Update Time", {"delayInMinutes": 1/4});
+					chrome.alarms.create("Update Time", {"delayInMinutes": 1});
 				}
 			});
 		});
