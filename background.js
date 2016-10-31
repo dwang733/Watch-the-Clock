@@ -29,10 +29,7 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 // Fires when user switches tab
 chrome.tabs.onActivated.addListener(function(activeInfo) {
 	console.log("Switched tabs!");
-	chrome.tabs.get(activeInfo.tabId, function(tab) {
-		var tld = getTLD(tab.url);
-		saveTime(tld);
-	});
+	updateCurrentTabTime();
 });
 
 // Fires when window changes focus (or no window is in focus)
@@ -45,12 +42,10 @@ chrome.windows.onFocusChanged.addListener(function(windowId) {
 	// Get active tab in newly focused window
 	else {
 		console.log("Chrome refocused!");
-		chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
-			tld = getTLD(tab[0].url);
-			saveTime(tld);
-		});
+		updateCurrentTabTime();
 	}
 });
+
 
 /****************** TIME TRACKING ******************/
 
@@ -96,23 +91,24 @@ function saveTime(thisURL) {
 	});
 }
 
-// Update time when alarm called
-chrome.alarms.onAlarm.addListener(function(alarm) {
+function updateCurrentTabTime() {
 	chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
 		tld = getTLD(tab[0].url);
-		console.log("Update from alarm at " + new Date().toLocaleTimeString());
 		saveTime(tld);
 	});
+}
+
+// Update time when alarm called
+chrome.alarms.onAlarm.addListener(function(alarm) {
+	console.log("Update from alarm at " + new Date().toLocaleTimeString());
+	updateCurrentTabTime();
 });
 
 // Detect if user is idle or not
 chrome.idle.onStateChanged.addListener(function(newState) {
 	console.log("Machine is " + newState);
 	if(newState === "active") {
-		chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
-			tld = getTLD(tab[0].url);
-			saveTime(tld);
-		});
+		updateCurrentTabTime();
 	}
 	// If idle or locked, stop time tracking
 	else {
@@ -125,6 +121,7 @@ chrome.runtime.onInstalled.addListener(function(details) {
 	chrome.idle.setDetectionInterval(300);
 });
 
+
 /**************** HELPER FUNCTIONS ******************/
 
 // Get top level domain name
@@ -133,8 +130,6 @@ function getTLD(thisURL) {
 	regex = /^(\w+:\/\/[^\/]+).*$/;
 	return thisURL.match(regex)[1];
 }
-
-/******************** DEBUGGING ********************/
 
 function printStorage() {
 	chrome.storage.sync.get(null, function(items) {
