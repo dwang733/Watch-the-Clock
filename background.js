@@ -37,7 +37,7 @@ chrome.tabs.onActivated.addListener(function(activeInfo) {
 
 // Fires when window changes focus (or no window is in focus)
 chrome.windows.onFocusChanged.addListener(function(windowId) {
-	// No windows are in focus
+	// If no windows are in focus, stop time tracking
 	if (windowId == chrome.windows.WINDOW_ID_NONE) {
 		console.log("Chrome unfocused!");
 		saveTime(undefined);
@@ -75,7 +75,8 @@ function saveTime(thisURL) {
 			setObj["prevStart"] = currTime;
 			setObj["prevURL"] = thisURL;
 			chrome.storage.sync.set(setObj, function() {
-				// If thisURL is undefined (b/c no focus), manually remove "prevURL" and alarm
+				// thisURL is undefined when we want to stop time tracking
+				// Manually remove "prevURL" and alarm
 				if (thisURL === undefined) {
 					chrome.storage.sync.remove("prevURL", function() {
 						console.log("Dumping storage from no focus!");
@@ -99,12 +100,33 @@ function saveTime(thisURL) {
 chrome.alarms.onAlarm.addListener(function(alarm) {
 	chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
 		tld = getTLD(tab[0].url);
-		console.log("Update from alarm.");
+		console.log("Update from alarm at " + new Date().toLocaleTimeString());
 		saveTime(tld);
 	});
 });
 
+// Detect if user is idle or not
+chrome.idle.onStateChanged.addListener(function(newState) {
+	console.log("Machine is " + newState);
+	if(newState === "active") {
+		chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
+			tld = getTLD(tab[0].url);
+			saveTime(tld);
+		});
+	}
+	// If idle or locked, stop time tracking
+	else {
+		saveTime(undefined);
+	}
+});
+
+// Set time interval when user is active.
+chrome.runtime.onInstalled.addListener(function(details) {
+	chrome.idle.setDetectionInterval(300);
+});
+
 /**************** HELPER FUNCTIONS ******************/
+
 // Get top level domain name
 // E.g. https://developer.chrome.com/extensions/storage -> https://developer.chrome.com
 function getTLD(thisURL) {
