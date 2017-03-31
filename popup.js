@@ -1,6 +1,6 @@
 $(document).ready(function() {
 	$("#button").click(function() {
-		chrome.storage.sync.clear();
+		chrome.storage.local.clear();
 		alert("Storage cleared!");
 	});
 });

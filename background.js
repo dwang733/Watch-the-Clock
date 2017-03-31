@@ -35,7 +35,7 @@ chrome.tabs.onActivated.addListener(function(activeInfo) {
 // Fires when window changes focus (or no window is in focus)
 chrome.windows.onFocusChanged.addListener(function(windowId) {
 	// If no windows are in focus, stop time tracking
-	if (windowId == chrome.windows.WINDOW_ID_NONE) {
+	if (windowId === chrome.windows.WINDOW_ID_NONE) {
 		console.log("Chrome unfocused!");
 		saveTime(undefined);
 	}
@@ -52,7 +52,7 @@ chrome.windows.onFocusChanged.addListener(function(windowId) {
 // Find previous URL visited and add time spent
 // Also set previous URL and time to current URL and time
 function saveTime(thisURL) {
-	chrome.storage.sync.get(["prevStart", "prevURL"], function(getItems) {
+	chrome.storage.local.get(["prevStart", "prevURL"], function(getItems) {
 		console.log("New URL: " + thisURL);
 		console.log("Previous URL: " + getItems["prevURL"]);
 		var setObj = {};
@@ -60,7 +60,7 @@ function saveTime(thisURL) {
 		var prevURL = getItems["prevURL"];
 		var prevStart = getItems["prevStart"];
 
-		chrome.storage.sync.get(prevURL, function(item) {
+		chrome.storage.local.get(prevURL, function(item) {
 			if (prevURL !== undefined && prevStart !== undefined) {
 				var prevURLTime = item[prevURL] === undefined ? 0 : item[prevURL];
 				console.log("Total time spent on prev URL before: " + prevURLTime);
@@ -69,11 +69,11 @@ function saveTime(thisURL) {
 			}
 			setObj["prevStart"] = currTime;
 			setObj["prevURL"] = thisURL;
-			chrome.storage.sync.set(setObj, function() {
+			chrome.storage.local.set(setObj, function() {
 				// thisURL is undefined when we want to stop time tracking
 				// Manually remove "prevURL" and alarm
 				if (thisURL === undefined) {
-					chrome.storage.sync.remove("prevURL", function() {
+					chrome.storage.local.remove("prevURL", function() {
 						console.log("Dumping storage from no focus!");
 						printStorage();
 						console.log("Cleared alarm.");
@@ -132,7 +132,7 @@ function getTLD(thisURL) {
 }
 
 function printStorage() {
-	chrome.storage.sync.get(null, function(items) {
+	chrome.storage.local.get(null, function(items) {
 		for (i in items) {
 			console.log("Key: " + i + "		Value: " + items[i]);
 		}
