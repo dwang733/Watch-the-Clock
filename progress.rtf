@@ -18,11 +18,13 @@ CURRENT BUGS:
 	- Maybe passing undefined into saveTime for onDetached?
 	- Doesn't seem too much of an issue? When reattached, current URL is correct?
 - printStorage() fires multiple times randomly. Find out the reason.
+- creating new window causes "refocus" when it isn't. Fix onFocus method.
 
 
 FIXED BUGS:
 √ Opening link in new tab causes that tab to be "current" one, even if it isn't
 
 
-KEEP IN MIND:
-- Storage limits?
+POSSIBLE PROBLEMS:
+√ Storage limits (changed from sync to local)
+√ Error checking for updateTime()
