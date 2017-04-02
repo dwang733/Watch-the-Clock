@@ -44,7 +44,7 @@ chrome.windows.onFocusChanged.addListener(function(windowId) {
 	}
 	// Get active tab in newly focused window
 	else {
-		console.log("Chrome refocused!");
+		console.log("Chrome changed focus!");
 		updateWithCurrentTab();
 	}
 });
@@ -84,20 +84,24 @@ function updateTime(thisURL) {
 			var [prevStart, prevURL, prevURLTime] = results;
 			// If no previous time spent, set it to 0
 			prevURLTime = prevURLTime[prevURL] ? prevURLTime[prevURL] : 0;
-			var setObj = {};
 			var currTime = new Date().getTime();
+			var setObj = {
+				"prevStart": currTime,
+				"prevURLStr": thisURL
+			};
 			// Only add time if there is a prev URL
 			if (prevStart && prevURL) {
-				console.log("Total time spent on prev URL before: " + prevURLTime);
+				console.log("Time spent on prev URL before: " + prevURLTime);
 				setObj[prevURL] = prevURLTime + (currTime - prevStart) / 1000;
 				console.log("Time just spent on prev URL: " + ((currTime - prevStart) / 1000));
 			}
-			setObj["prevStart"] = currTime;
-			setObj["prevURLStr"] = thisURL;
-			console.log(setObj);
+			// setObj["prevStart"] = currTime;
+			// setObj["prevURLStr"] = thisURL;
 			return safeMemoryOp(chrome.storage.local.set, setObj);
 		}).then(function() {
-			return thisURL ? true : safeMemoryOp(chrome.storage.local.remove, "prevURLStr");
+			if (!thisURL) {
+				return safeMemoryOp(chrome.storage.local.remove, "prevURLStr");
+			}
 		}).then(function() {
 			// Keep tracking time
 			if (thisURL) {
