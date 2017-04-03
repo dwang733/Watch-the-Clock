@@ -1,6 +1,6 @@
 "use strict"
 
-/****************** WEBSITE/FOCUS TRACKING *********************/
+/****************** EVENTS *********************/
 
 // Fires when new page is loaded
 // Use webNavigation.onCompleted instead of tabs.onUpdated
@@ -11,13 +11,13 @@ chrome.webNavigation.onCompleted.addListener(function(details) {
 		console.log("Loading new page!");
 		// Make sure we are actually seeing the new page 
 		// E.g. Open link in new tab will not trigger updateTime()
-		chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
+		chrome.tabs.query({currentWindow: true, active: true}, function(tabs) {
 			// Check if newly loaded page is actually on this tab
-			if (tab.length > 0 && tab[0].url === details.url) {
+			if (tabs.length > 0 && tabs[0].url === details.url) {
 				console.log("Loaded on current tab!");
-				var tld = getTLD(details.url);
+				const tld = getTLD(details.url);
 				updateTime(tld);
-			} else if (tab.length === 0) {
+			} else if (tabs.length === 0) {
 				console.log("Loaded elsewhere in unfocused window!");
 				console.log("---------------------------------");
 			}
@@ -52,14 +52,21 @@ chrome.windows.onFocusChanged.addListener(function(windowId) {
 // Detect if user is idle or not
 chrome.idle.onStateChanged.addListener(function(newState) {
 	console.log("Machine is " + newState);
-	if(newState === "active") {
-		updateWithCurrentTab();
-	}
-	// If idle or locked, stop time tracking
-	else {
+	// Stop time tracking if machine is idle/locked
+	// If it turns active again, it'll either be unfocused and nothing happens,
+	// or it will be focused and trigger one of the above events
+	if (newState !== "active") {
 		updateTime(undefined);
-	}R
+	}
 });
+
+// chrome.windows.onFocusChanged.addListener(function(windowId) {
+// 	if (windowId === chrome.windows.WINDOW_ID_NONE) {
+// 		var setObj = {"unfocused": true};
+// 		safeMemoryOp(chrome.storage.local.set, setObj)
+// 			.catch(error => console.error(error));
+// 	}
+// });
 
 // Set time interval when user is active.
 chrome.runtime.onInstalled.addListener(function(details) {
@@ -75,17 +82,17 @@ chrome.runtime.onInstalled.addListener(function(details) {
 function updateTime(thisURL) {
 	safeMemoryOp(chrome.storage.local.get, ["prevStart", "prevURLStr"])
 		.then(function(prev) {
-			var prevStart = prev["prevStart"];
-			var prevURL = prev["prevURLStr"];
+			const prevStart = prev["prevStart"];
+			const prevURL = prev["prevURLStr"];
 			console.log("New URL: " + thisURL);
 			console.log("Prev URL: " + prevURL);
 			return Promise.all([prevStart, prevURL, safeMemoryOp(chrome.storage.local.get, prevURL)]);
 		}).then(function(results) {
-			var [prevStart, prevURL, prevURLTime] = results;
+			let [prevStart, prevURL, prevURLTime] = results;
 			// If no previous time spent, set it to 0
 			prevURLTime = prevURLTime[prevURL] ? prevURLTime[prevURL] : 0;
-			var currTime = new Date().getTime();
-			var setObj = {
+			const currTime = new Date().getTime();
+			const setObj = {
 				"prevStart": currTime,
 				"prevURLStr": thisURL
 			};
@@ -105,9 +112,10 @@ function updateTime(thisURL) {
 		}).then(function() {
 			// Keep tracking time
 			if (thisURL) {
+				console.log("Setting alarm.");
+				chrome.alarms.create("Update Time", {"delayInMinutes": 1});
 				console.log("Dumping storage from focus!");
 				printStorage();
-				chrome.alarms.create("Update Time", {"delayInMinutes": 1});
 			}
 			else {
 				console.log("Cleared alarm.")
@@ -115,9 +123,7 @@ function updateTime(thisURL) {
 				console.log("Dumping storage from no focus!");
 				printStorage();
 			}
-		}).catch(function(error) {
-			console.error(error);
-		});
+		}).catch(error => console.error(error));
 }
 
 // Update time when alarm called
@@ -132,24 +138,16 @@ chrome.alarms.onAlarm.addListener(function(alarm) {
 // Get top level domain name
 // E.g. https://developer.chrome.com/extensions/ -> https://developer.chrome.com
 function getTLD(thisURL) {
-	var regex = /^(\w+:\/\/[^\/]+).*$/;
+	const regex = /^(\w+:\/\/[^\/]+).*$/;
 	return thisURL.match(regex)[1];
 }
 
 function printStorage() {
 	chrome.storage.local.get(null, function(items) {
-		for (var i in items) {
+		for (const i in items) {
 			console.log("Key: " + i + "		Value: " + items[i]);
 		}
 		console.log("---------------------------------");
-	});
-}
-
-// Pass URL in current tab to updateTime()
-function updateWithCurrentTab() {
-	chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
-		var tld = getTLD(tab[0].url);
-		updateTime(tld);
 	});
 }
 
@@ -158,9 +156,17 @@ function safeMemoryOp(op, arg) {
 	return new Promise(function(resolve, reject) {
 		op(arg, function(items) {
 			if (chrome.runtime.lastError) {
-				reject(Error("Memory error"));
+				reject(Error(chrome.runtime.lastError.message));
 			}
 			resolve(items);
 		});
+	});
+}
+
+// Pass URL in current tab to updateTime()
+function updateWithCurrentTab() {
+	chrome.tabs.query({currentWindow: true, active: true}, function(tab) {
+		const tld = getTLD(tab[0].url);
+		updateTime(tld);
 	});
 }
