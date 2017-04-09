@@ -3,8 +3,6 @@
 /****************** EVENTS *********************/
 
 // Fires when new page is loaded
-// Use webNavigation.onCompleted instead of tabs.onUpdated
-// tabs.onUpdated fires multiple times when page is loaded (for some reason)
 chrome.webNavigation.onCompleted.addListener(details => {
 	// Only occurs if page is fully loaded
 	if (details.frameId === 0) {
@@ -12,13 +10,10 @@ chrome.webNavigation.onCompleted.addListener(details => {
 		// Make sure we are actually seeing the new page 
 		// E.g. Open link in new tab will not trigger updateTime()
 		chrome.tabs.query({currentWindow: true, active: true}, tabs => {
-			if (tabs.length > 0) {
-				console.log(`${tabs[0].url} ${details.url}`);
-			}
 			// Check if newly loaded page is actually on this tab
-			if (tabs.length > 0 && tabs[0].url === details.url) {
+			if (tabs.length > 0 && tabs[0].id === details.tabId) {
 				console.log(`Loaded on current tab!`);
-				updateTime(getTLD(details.url));
+				updateTime(getTLD(tabs[0].url));
 			}
 			else {
 				console.log(`Loaded elsewhere (new tab, etc.)!`);
@@ -34,6 +29,9 @@ chrome.tabs.onActivated.addListener(activeInfo => {
 	chrome.tabs.get(activeInfo.tabId, tab => {
 		if (tab.status === "complete") {
 			updateWithCurrentTab();
+			chrome.runtime.sendMessage({greeting: "update"}, function(response) {
+				console.log(response);
+			});
 		}
 		else {
 			console.log(`Tab still loading.`);
@@ -41,6 +39,11 @@ chrome.tabs.onActivated.addListener(activeInfo => {
 		}
 	});
 });
+
+// chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+// 	console.log(request + " " + sender);
+// 	sendResponse({farewell: "goodbye"});
+// });
 
 // Fires when window changes focus (or no window is in focus)
 chrome.windows.onFocusChanged.addListener(windowId => {

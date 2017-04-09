@@ -5,10 +5,26 @@
 	<title>Watch the Clock!</title>
 	<script src="jquery-3.1.1.min.js"></script>
 	<script src="popup.js"></script>
+	<style>
+		td, th {
+			white-space: nowrap;
+			padding: 3px 15px 3px 15px;
+			text-align: left;
+		}
+	</style>
 </head>
 
 <body>
 	<button id="button">Clear Google storage!</button>
+	<table id="sortedTimes">
+		<thead id="thead">
+			<th>Website</th>
+			<th>Time</th>
+		</thead>
+		<tbody id="tbody">
+
+		</tbody>
+	</table>
 </body>
 
 </html>

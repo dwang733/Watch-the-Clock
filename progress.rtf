@@ -7,23 +7,30 @@ TODO:
 √ Stop time tracking if user is idle (chrome.idle)
 	√ Call setDetectionInterval()
 	- Allow user to set detection interval later
-- Display time data in popup. Figure out how to do this.
+√ Display time data in popup.
 - Store daily time for previous days
 - Store weekly and monthly time
 
 
-CURRENT BUGS:
+BUGS:
 ?? Detaching tab causes weird stuff
 	- Detecting onDetached and onAttached events isn't enough. Still fires other events.
 	- Maybe passing undefined into saveTime for onDetached?
 	- Doesn't seem too much of an issue? When reattached, current URL is correct?
 - Clicking on different tab while unfocused causes two events to fire simutaneously. Fix events overall. 
-
-
-FIXED BUGS:
-√ Opening link in new tab causes that tab to be "current" one, even if it isn't
-
-
-POSSIBLE PROBLEMS:
-√ Storage limits (changed from sync to local)
 √ Error checking for updateTime()
+√ Opening link in new tab causes that tab to be "current" one, even if it isn't
+√ chrome://newtab and loaded site are different
+
+
+TESTS:
+- Go to new page from current page
+- Switch between tabs normally
+- Switch from focused to unfocused to focused
+- Switch from unfocused to different tab (not active tab)
+- Switch between windows
+- Open new page in different tab
+	- Wait for other page to load, then visit it
+	- Go to other page while loading, then wait
+	- Go to other page while loading, then switch back to original page before it finishes loading
+- Detach then reattach tab
