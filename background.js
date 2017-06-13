@@ -10,12 +10,10 @@ chrome.webNavigation.onCompleted.addListener(details => {
 		// Make sure we are actually seeing the new page 
 		// E.g. Open link in new tab will not trigger updateTime()
 		chrome.tabs.query({currentWindow: true, active: true}, tabs => {
-			// Check if newly loaded page is actually on this tab
 			if (tabs.length > 0 && tabs[0].id === details.tabId) {
 				console.log(`Loaded on current tab!`);
 				updateTime(getTLD(tabs[0].url));
-			}
-			else {
+			} else {
 				console.log(`Loaded elsewhere (new tab, etc.)!`);
 				console.log(`---------------------------------`);
 			}
@@ -25,25 +23,19 @@ chrome.webNavigation.onCompleted.addListener(details => {
 
 // Fires when user switches tab
 chrome.tabs.onActivated.addListener(activeInfo => {
-	console.log(`New active tab!`);
 	chrome.tabs.get(activeInfo.tabId, tab => {
-		if (tab.status === "complete") {
-			updateWithCurrentTab();
-			chrome.runtime.sendMessage({greeting: "update"}, function(response) {
-				console.log(response);
-			});
-		}
-		else {
-			console.log(`Tab still loading.`);
-			updateTime(undefined);
+		// If window is closing, just ignore here.
+		if (!chrome.runtime.lastError) {
+			console.log(`New active tab!`);
+			if (tab.status === "complete") {
+				updateWithCurrentTab();
+			} else {
+				console.log(`Tab still loading.`);
+				updateTime(undefined);
+			}
 		}
 	});
 });
-
-// chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-// 	console.log(request + " " + sender);
-// 	sendResponse({farewell: "goodbye"});
-// });
 
 // Fires when window changes focus (or no window is in focus)
 chrome.windows.onFocusChanged.addListener(windowId => {
@@ -51,20 +43,19 @@ chrome.windows.onFocusChanged.addListener(windowId => {
 	if (windowId === chrome.windows.WINDOW_ID_NONE) {
 		console.log(`Chrome unfocused!`);
 		updateTime(undefined);
-	}
-	// Get active tab in newly focused window
-	else {
+	} else {
 		console.log(`Chrome changed focus!`);
 		updateWithCurrentTab();
 	}
 });
 
 // Detect if user is idle or not
+// We don't track if machine becomes active again.
+// If it turns active again, it'll either be unfocused and nothing happens,
+// or it will be focused and trigger one of the above events
 chrome.idle.onStateChanged.addListener(newState => {
 	console.log(`Machine is ${newState}`);
 	// Stop time tracking if machine is idle/locked
-	// If it turns active again, it'll either be unfocused and nothing happens,
-	// or it will be focused and trigger one of the above events
 	if (newState !== "active") {
 		updateTime(undefined);
 	}
@@ -88,46 +79,44 @@ function updateTime(thisURL) {
 			const prevURL = prev["prevURLStr"];
 			console.log(`New URL: ${thisURL}`);
 			console.log(`Prev URL: ${prevURL}`);
+			// If website is new, set previous time spent on it to 0.
 			return Promise.all([prevStart, prevURL, 
-				safeMemoryOp(chrome.storage.local.get, prevURL)]);
+				safeMemoryOp(chrome.storage.local.get, {[prevURL]: 0})]);
 		}).then(results => {
+			const [prevStart, prevURL, prevURLResult] = results;
+			const prevURLTime = prevURLResult[prevURL];
 			const currTime = new Date().getTime();
-			let [prevStart, prevURL, prevURLTime] = results;
-			// If no previous time spent, set it to 0
-			prevURLTime = prevURLTime[prevURL] ? prevURLTime[prevURL] : 0;
-			// Note: If a value is undefined, it's not stored
+			// If a value is undefined, it's not stored
 			const setObj = {
 				"prevStart": currTime,
 				"prevURLStr": thisURL
 			};
+			const timeSpent = (currTime - prevStart) / 1000;
+			console.log(`Time just spent on prev URL: ${timeSpent}`);
+			const alarmTime = 60;
 			// Only add time if there is a prev URL
-			if (prevURL) {
-				const timeSpent = (currTime - prevStart) / 1000;
+			// If time spent is more than alarm time, just ignore it (chrome probably closed)
+			if (prevURL && timeSpent < alarmTime * 1.5) {
 				setObj[prevURL] = prevURLTime + timeSpent;
-				console.log(`Time just spent on prev URL: ${timeSpent}`);
 			}
 			return safeMemoryOp(chrome.storage.local.set, setObj);
 		}).then(() => {
 			if (!thisURL) {
 				console.log("Deleting prev variables.");
 				return Promise.all([
-					safeMemoryOp(chrome.storage.local.remove, "prevURLStr"),
-					safeMemoryOp(chrome.storage.local.remove, "prevStart")]);
+					safeMemoryOp(chrome.storage.local.remove, "prevStart"),
+					safeMemoryOp(chrome.storage.local.remove, "prevURLStr")]);
 			}
 		}).then(() => {
 			// Keep tracking time
 			if (thisURL) {
 				console.log(`Setting alarm.`);
 				chrome.alarms.create("Update Time", {"delayInMinutes": 1});
-				// console.log(`Dumping storage from focus!`);
-				// printStorage();
 				console.log(`---------------------------------`);
 			}
 			else {
 				console.log(`Cleared alarm.`);
 				chrome.alarms.clear("Update Time");
-				// console.log(`Dumping storage from no focus!`);
-				// printStorage();
 				console.log(`---------------------------------`);
 			}
 		}).catch(error => console.error(error));
@@ -139,24 +128,7 @@ chrome.alarms.onAlarm.addListener(alarm => {
     updateWithCurrentTab();
 });
 
-/**************** HELPER FUNCTIONS ******************/
-
-// Get top level domain name
-// E.g. http://store.google.com/xyz -> http://store.google.com
-function getTLD(thisURL) {
-    const regex = /^(\S+:\/\/[^\/]+).*$/;
-	return thisURL.match(regex)[1];
-}
-
-// function printStorage() {
-// 	safeMemoryOp(chrome.storage.local.get, null)
-// 		.then(items => {
-// 			for (const i in items) {
-// 				console.log(`Key: ${i}		Value: ${items[i]}`);
-// 			}
-// 			console.log("---------------------------------");
-// 		}).catch(error => console.error(error));
-// }
+/**************** HELPER/DEBUGGER FUNCTIONS ******************/
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
 	for (const i in changes) {
@@ -164,6 +136,13 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 			`newValue: ${changes[i]["newValue"]}`);
 	}
 });
+
+// Get top level domain name
+// E.g. http://store.google.com/xyz -> http://store.google.com
+function getTLD(thisURL) {
+    const regex = /^(\S+?:\/\/[^\/]+).*$/;
+	return thisURL.match(regex)[1];
+}
 
 // Performs the memory op with the given arg and checks that it succeeded
 function safeMemoryOp(op, arg) {

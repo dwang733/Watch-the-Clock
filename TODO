@@ -1,0 +1,42 @@
+TODO:
+- [x] Track if website on current tab changes
+- [x] Detect if user switches between tabs
+- [x] Detect if user switches windows
+- [x] Detect if user is in focus or not
+- [x] Auto-update time periodically if user is in focus (chrome.alarms)
+- [x] Stop time tracking if user is idle (chrome.idle)
+	- [x] Call setDetectionInterval()
+	- [ ] Allow user to set detection interval later
+- [x] Display time data in popup
+- [x] Handle chrome closing
+	- [x] Handle multiple tabs when chrome is closing
+- [ ] Store daily time for previous days
+- [ ] Store weekly and monthly time
+
+
+BUGS:
+[ ] Detaching tab causes weird stuff
+	- Detecting onDetached and onAttached events isn't enough. Still fires other events.
+	- Maybe passing undefined into saveTime for onDetached?
+	- Doesn't seem too much of an issue? When reattached, current URL is correct?
+- [ ] Clicking on different tab while unfocused causes two events to fire simutaneously. 
+- [x] Error checking for updateTime()
+- [x] Opening link in new tab causes that tab to be "current" one, even if it isn't
+- [x] chrome://newtab and loaded site are different
+- [x] web.archive.org links match to 2nd http instead of 1st
+
+
+TESTS:
+- Go to new page from current page
+- Switch between tabs normally
+- Switch from focused to unfocused to focused
+- Switch from unfocused to different tab (not active tab)
+- Switch between windows
+- Open new page in different tab
+	- Wait for other page to load, then visit it
+	- Go to other page while loading, then wait
+	- Go to other page while loading, then switch back to original page before it finishes loading
+- Detach then reattach tab
+- Close chrome w/ one tab open
+- Close chrome w/ multiple tabs open
+- Close chrome, wait >1 min, then reopen
