@@ -7,7 +7,7 @@ $(document).ready(() => {
 
     chrome.storage.local.get(null, sitesDict => {
         let sites = Object.keys(sitesDict).map(key => [key, sitesDict[key]]);
-        sites = sites.filter(row => row[0] !== "prevURLStr" && row[0] !== "prevStart");
+        sites = sites.filter(row => row[0] !== "prevTab" && row[0] !== "prevStart");
         sites.sort((x, y) => y[1] - x[1]); // Sort from highest to lowest times
         const tbody = $("#tbody");
         for (let i = 0; i < sites.length; i++) {
