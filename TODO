@@ -4,7 +4,7 @@ TODO:
 - [x] Detect if user switches windows
 - [x] Detect if user is in focus or not
 - [x] Auto-update time periodically if user is in focus (chrome.alarms)
-- [ ] Stop time tracking if user is idle (chrome.idle)
+- [x] Stop time tracking if user is idle (chrome.idle)
 - [x] Display time data in popup
 - [x] Handle windows closing
 - [x] Handle user quitting Chrome
@@ -14,10 +14,8 @@ TODO:
 
 BUGS:
 [ ] Detaching tab causes weird stuff
-	- Detecting onDetached and onAttached events isn't enough. Still fires other events.
-	- Maybe passing undefined into saveTime for onDetached?
-	- Doesn't seem too much of an issue? When reattached, current URL is correct?
-- [ ] Clicking on different tab while unfocused causes two events to fire simutaneously. 
+	- Doesn't seem to matter too much, just causes a lot of events to fire off
+- [x] Clicking on different tab while unfocused causes two events to fire simutaneously. 
 - [x] Error checking for updateTime()
 - [x] Opening link in new tab causes that tab to be "current" one, even if it isn't
 - [x] chrome://newtab and loaded site are different
@@ -25,24 +23,41 @@ BUGS:
 
 
 TESTS:
-- Go to new page from current page
-- Switch between tabs normally
-- Open new page in different tab
-	- Wait for other page to load, then visit it
-	- Go to other page while loading, then wait
-	- Go to other page while loading, then switch back to original page before it finishes loading
-	- Click Youtube button in embedded video (tab has "" url)
-- Switch between windows
-- Focus
-	- Switch from focused to unfocused to focused
-	- Switch from unfocused to different tab (not active tab)
-- Idle
-	- Idle, then click on same active tab
-	- Idle, then click on different tab
-	- Idle, then go unfocused
-- Closing windows
-	- Close window w/ one tab open
-	- Close window w/ multiple tabs open
-	- Close window w/ multiple windows open
-- Quit chrome, wait, then reopen
-- Detach then reattach tab
+- [x] Navigate to new page
+	- [x] Go to new page from current page
+	- [x] Go to new page from current page, then go unfocused while it's still loading
+	- [x] Go to new page from current page, then go to other window while it's still loading
+	- [x] Open new tab
+- [x] Switch between tabs normally
+- [x] Open new page in different tab
+	- [x] Wait for other page to load, then visit it
+	- [x] Go to other page while loading, then wait
+	- [x] Go to other page while loading, then switch back to original page before it finishes loading
+	- [x] Click Youtube button in embedded video (tab has "" url)
+	- [x] Open multiple tabs at once (e.g. recently closed tabs)
+- [x] Window focus
+	- [x] Switch between focused and unfocused
+	- [x] Switch between 2 non-chrome apps (both unfocused)
+	- [x] Switch from unfocused to different tab (not active tab)
+	- [x] Open new window
+	- [x] Switch between windows (same active tabs)
+	- [x] Switch between windows (different active tabs)
+	- [x] Minimize, then reopen window
+	- [x] Open new tab from unfocused
+- [x] Wait for alarm (1 min)
+- [x] Idle
+	- [x] Idle from focused, then click on same active tab
+	- [x] Idle from unfocused, then click on same active tab
+	- [x] Idle from focused, then click on different tab
+	- [x] Idle from unfocused, then click on different tab
+	- [x] Idle from focused, then go unfocused
+	- [x] Idle from unfocused, then go unfocused
+- [x] Closing windows
+	- [x] Close window with multiple windows open
+		- [x] One tab open
+		- [x] Multiple tabs open
+	- [x] Close window with one window open
+		- [x] One tab open
+		- [x] Multiple tabs open
+- [x] Quit chrome, wait, then reopen
+- [x] Detach then reattach tab
