@@ -1,15 +1,26 @@
 "use strict";
 
+const ALARM_TIME = 60; // In seconds
+const ALARM_BUFFER = 1.1; // Alarm usually triggers a little late
+const IDLE_TIME = 300; // In seconds
+
+let RESET_HOUR = 2;
+let RESET_MIN = 20;
+
 /****************** EVENTS *********************/
 
 // Fires when a different/no window is in focus
-chrome.windows.onFocusChanged.addListener(windowId => {
+chrome.windows.onFocusChanged.addListener(async windowId => {
     if (windowId === chrome.windows.WINDOW_ID_NONE) {
-        console.log(`Chrome unfocused!`);
-        stopTracking("unfocused");
+        // If machine is locked, window also goes unfocused. Ignore in this case.
+        const newState = await promisify(chrome.idle.queryState, IDLE_TIME);
+        if (newState === "active") {
+            console.log(`Chrome unfocused!`);
+            await stopTracking("unfocused");
+        }
     } else {
         console.log(`Chrome changed focus!`);
-        updateWithCurrentTab();
+        await updateWithCurrentTab();
     }
 });
 
@@ -17,101 +28,121 @@ chrome.windows.onFocusChanged.addListener(windowId => {
 chrome.tabs.onActivated.addListener(async activeInfo => {
     // If window is closing, tab not found and throws error, so ignore.
     try {
-        var tab = await safeChromeOp(chrome.tabs.get, activeInfo.tabId);
-    } catch (err) {
+        var tab = await safePromisify(chrome.tabs.get, activeInfo.tabId);
+    } catch (e) {
         return; 
     }
 
     console.log(`New active tab!`);
     try {
-        const prev = (await safeChromeOp(chrome.storage.local.get, 
-            ["prevStatus", "prevTab"]));
-        const prevStatus = prev["prevStatus"];
-        const prevTab = prev["prevTab"];
-        if (prevStatus === "unfocused") {
+        const prev = (await safePromisify(chrome.storage.local.get, 
+            ["prevTab", "unfocused"]));
+        const prevTab = prev.prevTab;
+        const unfocused = prev.unfocused;
+        if (unfocused) {
             console.log("Chrome previously unfocused, handled by other events.");
         }
         else if (tab.windowId === prevTab.windowId) {
             console.log(`Active tab in same window!`);
-            updateWithCurrentTab();
+            await updateWithCurrentTab();
         } else {
             console.log(`Active tab in different window, handled by other events.`);
         }
-    } catch (err) {
-        console.error(err);
+    } catch (e) {
+        console.error(e);
     }
 });
 
 // Fires when new page is loaded
-chrome.webNavigation.onCompleted.addListener(details => {
+chrome.webNavigation.onCompleted.addListener(async details => {
     // Only occurs if page is fully loaded
     if (details.frameId === 0) {
         console.log(`Loaded new page!`);
-        chrome.tabs.get(details.tabId, tab => {
-            chrome.windows.get(tab.windowId, window => {
-                if (tab.active && window.focused) {
-                    console.log(`Loaded on focused, active tab!`);
-                    updateWithCurrentTab();
-                } else {
-                    console.log(`Loaded elsewhere (new tab, etc.)!`);
-                    console.log(`---------------------------------`);
-                }
-            });
-        });
+        const tab = await promisify(chrome.tabs.get, details.tabId);
+        const tabWindow = await promisify(chrome.windows.get, tab.windowId);
+        if (tab.active && tabWindow.focused) {
+            console.log(`Loaded on focused, active tab!`);
+            await updateWithCurrentTab();
+        } else {
+            console.log(`Loaded elsewhere (new tab, etc.)!`);
+            console.log(`---------------------------------`);
+        }
     }
 });
 
 // Detect if user is idle or not
-chrome.idle.onStateChanged.addListener(newState => {
+chrome.idle.onStateChanged.addListener(async newState => {
     console.log(`Machine is ${newState}.`);
     if (newState !== "active") {
-        stopTracking("idle");
+        await stopTracking("idle");
     } else {
-        chrome.windows.getCurrent({}, async window => {
+        const currentWindow = await promisify(chrome.windows.getCurrent, {});
+        try {
             // Idle event always late. If status still idle, update if necesary.
-            const isIdle = (await safeChromeOp(chrome.storage.local.get, 
-                "isIdle"))["isIdle"];
-            if (isIdle && window.focused) {
-                updateWithCurrentTab();
+            const idle = (await safePromisify(chrome.storage.local.get, 
+                "idle")).idle;
+            await safePromisify(chrome.storage.local.remove, "idle");
+            if (idle && currentWindow.focused) {
+                await updateWithCurrentTab();
             } else {
                 console.log("Active state handled by other events.");
                 console.log(`---------------------------------`);
             }
-        });
+        } catch (e) {
+            console.error(e);
+        }
     }
 });
 
 // Update time when alarm called
-chrome.alarms.onAlarm.addListener(alarm => {
-    console.log(`Update from alarm at ${new Date().toLocaleTimeString()}`);
-    updateWithCurrentTab();
+chrome.alarms.onAlarm.addListener(async alarm => {
+    console.log(`Update from alarm "${alarm.name}" at ${new Date()}`);
+    if (alarm.name === "update") {
+        await updateWithCurrentTab();
+    } else if (alarm.name === "reset") {
+        const currentWindow = await promisify(chrome.windows.getCurrent, {});
+        if (currentWindow.focused) {
+            await updateWithCurrentTab();
+        }
+        await resetTracking();
+    }
 });
 
 // Set time interval when user is active.
 chrome.runtime.onInstalled.addListener(async details => {
-    console.log(`Installing...`);
-    chrome.idle.setDetectionInterval(15);
-    await trackCurrentTab();
-    console.log(`---------------------------------`);
+    try {
+        console.log(`Installing...`);
+        await safePromisify(chrome.storage.local.clear);
+        await promisify(chrome.alarms.clearAll);
+        chrome.idle.setDetectionInterval(IDLE_TIME);
+        const resetAlarm = await promisify(chrome.alarms.get, "reset");
+        if (!resetAlarm) {
+            await resetTracking();
+        }
+        await updateWithCurrentTab();
+    } catch (e) {
+        console.error(e);
+    }
 });
 
 /****************** TIME TRACKING ******************/
 
 async function updateWithCurrentTab() {
     try {
-        if ((await getCurrentTab()).status === "loading") {
-            console.log("Tab still loading, stop tracking time.");
-            stopTracking("loading");
-        } else {
-            await updateTime();
-            await trackCurrentTab();
-            await safeChromeOp(chrome.storage.local.remove, "isIdle");
-            console.log(`Setting alarm.`);
-            chrome.alarms.create("Update Time", {"delayInMinutes": 1});
-            console.log(`---------------------------------`);
-        }
-    } catch (err) {
-        console.error(err);
+        await updateTime();
+        // await trackCurrentTab();
+        console.log(`Tracking current tab!`);
+        const currentTab = (await promisify(chrome.tabs.query, 
+            {currentWindow: true, active: true}))[0];;
+        console.log(`Current url: ${getTLD(currentTab.url)}`);
+        await safePromisify(chrome.storage.local.set, 
+            {prevStart: new Date().getTime(), prevTab: currentTab});
+        await safePromisify(chrome.storage.local.remove, ["idle", "unfocused"]);
+        console.log(`Setting alarm.`);
+        chrome.alarms.create("update", {"delayInMinutes": ALARM_TIME / 60});
+        console.log(`---------------------------------`);
+    } catch (e) {
+        console.error(e);
     }
 }
 
@@ -119,59 +150,87 @@ async function stopTracking(newStatus) {
     try {
         await updateTime();
         console.log(`Stopping time tracking.`);
-        await safeChromeOp(chrome.storage.local.remove, "prevStart");
+        await safePromisify(chrome.storage.local.remove, "prevStart");
         if (newStatus === "idle") {
-            await safeChromeOp(chrome.storage.local.set, {"isIdle": true});
+            await safePromisify(chrome.storage.local.set, {idle: true});
         } else {
-            await safeChromeOp(chrome.storage.local.set, {"prevStatus": newStatus});
-            await safeChromeOp(chrome.storage.local.remove, "isIdle");
+            await safePromisify(chrome.storage.local.set, {unfocused: true});
+            await safePromisify(chrome.storage.local.remove, "idle");
         }
         console.log(`Clearing alarm.`);
         console.log(`---------------------------------`);
-        chrome.alarms.clear("Update Time");
-    } catch (err) {
-        console.error(err);
+        await promisify(chrome.alarms.clear, "update");
+    } catch (e) {
+        console.error(e);
     }
 }
 
 async function updateTime() {
-    const prev = await safeChromeOp(chrome.storage.local.get, 
-        ["prevStart", "prevTab"]);
-    const prevStart = prev["prevStart"];
-    const prevTab = prev["prevTab"];
-    if (!prevStart) return; // Don't update if chrome was unfocused
-    const prevURL = getTLD(prevTab.url);
-    const prevURLTime = (await safeChromeOp(chrome.storage.local.get, 
-        {[prevURL]: 0}))[prevURL];
-    const timeSpent = (new Date().getTime() - prevStart) / 1000;
-    // Don't add time if it's greater than alarm time (chrome probably closed)
-    if (timeSpent < 60 * 1.1) {
-        console.log(`Updating website time!`);
-        console.log(`Prev url: ${prevURL}`);
-        console.log(`Time just spent on prev URL: ${timeSpent}`);
-        const setObj = {[prevURL]: prevURLTime + timeSpent};
-        await safeChromeOp(chrome.storage.local.set, setObj);
+    try {
+        const prev = await safePromisify(chrome.storage.local.get, 
+            ["prevStart", "prevTab"]);
+        const prevStart = prev.prevStart;
+        // Don't update if we weren't tracking time
+        if (!prevStart) {
+            return;
+        }
+        const timeSpent = (new Date().getTime() - prevStart) / 1000;
+        // Don't add time if it's greater than alarm time (chrome probably closed)
+        if (timeSpent < ALARM_TIME * ALARM_BUFFER) {
+            const prevURL = getTLD(prev.prevTab.url);
+            let timeData = (await safePromisify(chrome.storage.local.get, 
+                "timeData")).timeData;
+            let todayData = timeData[timeData.length - 1];
+            let prevURLTime = todayData[prevURL];
+            if (!prevURLTime) {
+                prevURLTime = 0;
+            }
+            console.log(`Updating website time!`);
+            console.log(`Prev url: ${prevURL}`);
+            console.log(`Time just spent on prev URL: ${timeSpent}`);
+            todayData[prevURL] = prevURLTime + timeSpent;
+            await safePromisify(chrome.storage.local.set, {timeData: timeData});
+        }
+    } catch (e) {
+        console.error(e);
     }
 }
 
-async function trackCurrentTab() {
-    console.log(`Tracking current tab!`);
-    const currentTab = await getCurrentTab();
-    const setObj = {
-        "prevStart": new Date().getTime(),
-        "prevStatus": "complete",
-        "prevTab": currentTab
-    };
-    console.log(`Current url: ${getTLD(currentTab.url)}`);
-    await safeChromeOp(chrome.storage.local.set, setObj);
+async function resetTracking() {
+    try {
+        console.log(`Resetting time tracking!`);
+        const now = new Date();
+        // const resetDate = new Date(now.getFullYear(), now.getMonth(), 
+        //     now.getDate() + 1, RESET_HOUR, RESET_MIN);
+
+        // TEMP LINES
+        const resetDate = new Date(now.getFullYear(), now.getMonth(), 
+            now.getDate(), RESET_HOUR, RESET_MIN);
+        RESET_MIN++;
+
+        console.log(`New reset timer at ${resetDate}.`);
+        chrome.alarms.create("reset", {when: resetDate.getTime()});
+        let timeData = (await safePromisify(chrome.storage.local.get, 
+                "timeData")).timeData;
+        if (!timeData) {
+            timeData = [{startTime: now.getTime(), endTime: resetDate.getTime()}];
+        } else {
+            timeData.push({startTime: timeData[timeData.length - 1].endTime, 
+                endTime: resetDate.getTime()});
+        }
+        await safePromisify(chrome.storage.local.set, {timeData: timeData});
+        console.log(`---------------------------------`);
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 /**************** HELPER/DEBUGGER FUNCTIONS ******************/
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
     for (const i in changes) {
-        console.log(`Key: ${i} \n` + `oldValue: ${changes[i]["oldValue"]} \n` +
-            `newValue: ${changes[i]["newValue"]}`);
+        console.log(`Key: ${i} \n` + `oldValue: ${changes[i].oldValue} \n` +
+            `newValue: ${changes[i].newValue}`);
     }
 });
 
@@ -182,18 +241,26 @@ function getTLD(thisURL) {
     return thisURL.match(regex)[1];
 }
 
-// Performs the memory op with the given arg and checks that it succeeded
-function safeChromeOp(op, arg) {
+// Converts ordinary callbacks w/ no errors to promise
+function promisify(op, arg) {
     return new Promise((resolve, reject) => {
-        op(arg, retVal => chrome.runtime.lastError ? 
-            reject(chrome.runtime.lastError) : resolve(retVal));
+        if (arg) {
+            op(arg, retVal => resolve(retVal));
+        } else {
+            op(retVal => resolve(retVal));
+        }
     });
 }
 
-function getCurrentTab() {
+// Performs the memory op with the given arg and checks that it succeeded
+function safePromisify(op, arg) {
     return new Promise((resolve, reject) => {
-        chrome.tabs.query({"currentWindow": true, "active": true}, tabs => {
-            resolve(tabs[0]);
-        });
-    })
+        if (arg) {
+            op(arg, retVal => chrome.runtime.lastError ? 
+                reject(chrome.runtime.lastError) : resolve(retVal));
+        } else {
+            op(retVal => chrome.runtime.lastError ? 
+                reject(chrome.runtime.lastError) : resolve(retVal));
+        }
+    });
 }

@@ -3,19 +3,25 @@
 
 <head>
 	<title>Watch the Clock!</title>
-	<script src="jquery-3.2.1.min.js"></script>
-	<script src="popup.js"></script>
+	<script defer src="jquery-3.2.1.min.js"></script>
+	<script defer src="background.js"></script>
+	<script defer src="popup.js"></script>
 	<style>
 		td, th {
 			white-space: nowrap;
 			padding: 3px 15px 3px 15px;
 			text-align: left;
 		}
+		#back, #forward {
+			display: inline-block;
+		}
 	</style>
 </head>
 
 <body>
-	<button id="button">Clear Google storage!</button>
+	<button id="clear">Clear Google storage!</button>
+	<button id="back">&#171;</button>
+	<button id="forward">&#187;</button>
 	<table id="sortedTimes">
 		<thead id="thead">
 			<th>Website</th>

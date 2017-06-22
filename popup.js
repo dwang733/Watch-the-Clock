@@ -1,15 +1,44 @@
 "use strict";
 
-$(document).ready(() => {
-	$("#button").click(function() {
-		chrome.storage.local.clear();
-	});
+let timeDataIdx;
 
-    chrome.storage.local.get(null, sitesDict => {
+$("#clear").click(() => {
+	chrome.storage.local.clear();
+    updateWithCurrentTab();
+});
+
+$("#back").click(() => {
+    timeDataIdx = Math.max(0, timeDataIdx - 1);
+    displayTimes();
+});
+
+$("#forward").click(async () => {
+    const timeData = (await safePromisify(chrome.storage.local.get, 
+            "timeData")).timeData;
+    timeDataIdx = Math.min(timeDataIdx + 1, timeData.length - 1);
+    displayTimes();
+});
+
+init();
+
+async function init() {
+    const timeData = (await safePromisify(chrome.storage.local.get, 
+            "timeData")).timeData;
+    timeDataIdx = timeData.length - 1;
+    displayTimes();
+}
+
+async function displayTimes() {
+    try {
+        $("#tbody tr").remove();
+        const timeData = (await safePromisify(chrome.storage.local.get, 
+            "timeData")).timeData;
+        const sitesDict = timeData[timeDataIdx];
         let sites = Object.keys(sitesDict).map(key => [key, sitesDict[key]]);
-        sites = sites.filter(row => row[0] !== "prevTab" && row[0] !== "prevStart");
+        const privateVars = ["startTime", "endTime"];
+        sites = sites.filter(row => privateVars.indexOf(row[0]) === -1);
         sites.sort((x, y) => y[1] - x[1]); // Sort from highest to lowest times
-        const tbody = $("#tbody");
+        let appendBody = ``;
         for (let i = 0; i < sites.length; i++) {
             let prettyTime = ``;
             let seconds = sites[i][1];
@@ -23,8 +52,11 @@ $(document).ready(() => {
                 prettyTime += `${mins}m `;
                 seconds -= mins * 60;
             }
-            prettyTime += `${Math.floor(seconds)}s`;
-            tbody.append(`<tr><td>${sites[i][0]}</td><td>${prettyTime}</td></tr>`);
+            prettyTime += `${Math.round(seconds)}s`;
+            appendBody += `<tr><td>${sites[i][0]}</td><td>${prettyTime}</td></tr>`
         }
-    });
-});
+        $("#tbody").append(appendBody);
+    } catch (err) {
+        console.error(err);
+    }
+}
